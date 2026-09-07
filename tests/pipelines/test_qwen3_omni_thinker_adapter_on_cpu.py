@@ -21,22 +21,147 @@ Patches dropped from the adapter:
 """
 
 import importlib.metadata
+from types import SimpleNamespace
 
 import pytest
 import torch
 import torch.nn as nn
 from packaging.version import parse as parse_version
 
+from verl_omni.pipelines.qwen3_omni.thinker_training_adapter import Qwen3OmniThinkerAdapter
+
 
 def _require_version(pkg_name: str, min_version: str):
-    """Raise ``AssertionError`` if *pkg_name* is below *min_version*."""
     ver = importlib.metadata.version(pkg_name)
-    assert parse_version(ver) >= parse_version(min_version), f"{pkg_name} >= {min_version} is required, got {ver}"
+    assert parse_version(ver) >= parse_version(min_version), f"{pkg_name} >= {min_version} required, got {ver}"
 
 
 def _has_lora(module: nn.Module) -> bool:
     """Return True if *module* was wrapped with LoRA by PEFT."""
     return hasattr(module, "lora_A") and hasattr(module, "lora_B")
+
+
+def test_configure_processor_binds_multimodal_pad_dedup(monkeypatch):
+    """The V1 processor path must collapse image, video, and audio pad runs."""
+    pytest.importorskip("transformers")
+    _require_version("transformers", "5.0.0")
+
+    from transformers import AutoConfig, AutoProcessor
+
+    token_ids = {
+        "<|image_pad|>": 101,
+        "<|video_pad|>": 102,
+        "<|audio_pad|>": 103,
+    }
+    tokenizer = SimpleNamespace(
+        unk_token_id=0,
+        convert_tokens_to_ids=lambda token: token_ids.get(token, 0),
+    )
+    processor = SimpleNamespace(
+        tokenizer=tokenizer,
+        image_token="<|image_pad|>",
+        video_token="<|video_pad|>",
+        audio_token="<|audio_pad|>",
+    )
+    config = SimpleNamespace(
+        thinker_config=SimpleNamespace(vision_config=SimpleNamespace(spatial_merge_size=2)),
+        talker_config=SimpleNamespace(vision_start_token_id=104),
+    )
+
+    monkeypatch.setattr(AutoProcessor, "from_pretrained", lambda *args, **kwargs: processor)
+    monkeypatch.setattr(AutoConfig, "from_pretrained", lambda *args, **kwargs: config)
+
+    configured = Qwen3OmniThinkerAdapter.configure_processor(
+        "/fake/qwen3-omni",
+        SimpleNamespace(trust_remote_code=False),
+    )
+
+    assert configured is processor
+    assert hasattr(configured, "dedup_pad_tokens")
+    assert configured.dedup_pad_tokens([7, 7, 101, 101, 101, 8, 102, 102, 9, 103, 103, 103, 7, 7]) == [
+        7,
+        7,
+        101,
+        8,
+        102,
+        9,
+        103,
+        7,
+        7,
+    ]
+
+
+def test_v1_adapter_forwards_qwen3_omni_audio_lengths_to_rope(monkeypatch):
+    """The V1 adapter must install the audio-aware agent-loop RoPE path."""
+    pytest.importorskip("transformers")
+    _require_version("transformers", "5.0.0")
+
+    from transformers import AutoConfig, AutoProcessor
+    from transformers.models.qwen3_omni_moe import Qwen3OmniMoeThinkerForConditionalGeneration
+
+    class Qwen3OmniMoeProcessor:
+        def __init__(self):
+            self.audio_seqlens = None
+            self.tokenizer = None
+
+    class AgentLoopWorker:
+        def _compute_position_ids(self, input_ids, attention_mask, multi_modal_inputs, mm_processor_kwargs=None):
+            del mm_processor_kwargs
+            multi_modal_kwargs = {
+                "image_grid_thw": multi_modal_inputs.get("image_grid_thw"),
+                "video_grid_thw": multi_modal_inputs.get("video_grid_thw"),
+            }
+            get_rope_index_kwargs = getattr(self.processor, "get_rope_index_kwargs", None)
+            if get_rope_index_kwargs is not None:
+                multi_modal_kwargs.update(get_rope_index_kwargs(multi_modal_inputs))
+            position_ids, _ = self.processor.get_rope_index(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                **multi_modal_kwargs,
+            )
+            return position_ids
+
+    def _get_rope_index(
+        processor,
+        *,
+        input_ids,
+        attention_mask,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        audio_seqlens=None,
+    ):
+        del attention_mask, image_grid_thw, video_grid_thw
+        processor.audio_seqlens = audio_seqlens
+        _ = audio_seqlens[0]
+        return torch.zeros((3, *input_ids.shape), dtype=torch.float32), torch.zeros((input_ids.shape[0], 1))
+
+    processor = Qwen3OmniMoeProcessor()
+    config = SimpleNamespace(
+        thinker_config=SimpleNamespace(vision_config=SimpleNamespace(spatial_merge_size=2)),
+        talker_config=SimpleNamespace(vision_start_token_id=104),
+    )
+    monkeypatch.setattr(AutoProcessor, "from_pretrained", lambda *args, **kwargs: processor)
+    monkeypatch.setattr(AutoConfig, "from_pretrained", lambda *args, **kwargs: config)
+    monkeypatch.setattr(Qwen3OmniMoeThinkerForConditionalGeneration, "get_rope_index", _get_rope_index)
+
+    configured = Qwen3OmniThinkerAdapter.configure_processor(
+        "/fake/qwen3-omni",
+        SimpleNamespace(trust_remote_code=False),
+    )
+    assert hasattr(configured, "get_rope_index_kwargs")
+
+    multi_modal_inputs = {"feature_attention_mask": torch.tensor([[1, 1, 1, 0]])}
+    extra_kwargs = configured.get_rope_index_kwargs(multi_modal_inputs)
+    assert "audio_seqlens" in extra_kwargs
+    torch.testing.assert_close(extra_kwargs["audio_seqlens"], torch.tensor([3]))
+
+    worker = AgentLoopWorker()
+    worker.processor = configured
+    input_ids = torch.tensor([[1, 2, 3]])
+    attention_mask = torch.ones_like(input_ids)
+
+    worker._compute_position_ids(input_ids, attention_mask, multi_modal_inputs)
+    torch.testing.assert_close(configured.audio_seqlens, torch.tensor([3]))
 
 
 class _FusedMoEExperts(nn.Module):
@@ -215,9 +340,20 @@ def test_thinker_class_no_split_modules_is_correct():
         Qwen3OmniMoeThinkerForConditionalGeneration,
     )
 
-    expected = ["Qwen3OmniMoeAudioEncoder", "Qwen3OmniMoeVisionEncoder"]
+    required = {
+        "Qwen3OmniMoeAudioEncoder",
+        "Qwen3OmniMoeVisionEncoder",
+    }
+    optional = {"Qwen3OmniMoeThinkerTextDecoderLayer"}
     actual = Qwen3OmniMoeThinkerForConditionalGeneration._no_split_modules
-    assert actual == expected, f"_no_split_modules should be {expected} in transformers >= 5.0, got {actual}"
+    actual_set = set(actual)
+    assert required.issubset(actual_set), (
+        f"_no_split_modules should include {sorted(required)} in transformers >= 5.0, got {actual}"
+    )
+    unexpected = actual_set - required - optional
+    assert not unexpected, (
+        f"_no_split_modules has unexpected entries {sorted(unexpected)} in transformers >= 5.0, got {actual}"
+    )
 
 
 def test_peft_wrapped_model_forwards():

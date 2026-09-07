@@ -49,12 +49,11 @@ async def _chat_complete(router_address: str, chat_complete_request: dict) -> Ch
 
 
 def _to_pil(image) -> Image.Image:
-    """Normalize a tensor / array / PIL image to a uint8 RGB PIL image."""
+    """Convert a uint8 tensor / array / PIL image to an RGB PIL image."""
     if isinstance(image, torch.Tensor):
-        image = image.float().permute(1, 2, 0).cpu().numpy()
+        image = image.permute(1, 2, 0).cpu().numpy()
     if isinstance(image, np.ndarray):
         assert image.shape[-1] == 3, "must be in HWC format"
-        image = (image * 255).round().clip(0, 255).astype(np.uint8)
         image = Image.fromarray(image)
     assert isinstance(image, Image.Image)
     return image
@@ -76,6 +75,22 @@ def _levenshtein_score(text: str, ground_truth: str) -> float:
         return 1 - dist / len(gt)
     # Empty ground truth: only an empty transcription is a perfect match.
     return 1.0 if len(text) == 0 else 0.0
+
+
+def _sampling_params() -> dict:
+    params = dict(DEFAULT_SAMPLING_PARAMS)
+    env_overrides = {
+        "temperature": ("GENRM_OCR_TEMPERATURE", float),
+        "top_p": ("GENRM_OCR_TOP_P", float),
+        "max_tokens": ("GENRM_OCR_MAX_TOKENS", int),
+        "seed": ("GENRM_OCR_SEED", int),
+    }
+    for key, (env_name, parser) in env_overrides.items():
+        raw_value = os.environ.get(env_name)
+        if raw_value is None:
+            continue
+        params[key] = parser(raw_value)
+    return params
 
 
 async def compute_score_ocr(
@@ -171,7 +186,7 @@ async def compute_score_ocr(
         chat_complete_request = {
             "messages": messages,
             "model": model_name,
-            **DEFAULT_SAMPLING_PARAMS,
+            **_sampling_params(),
         }
         result = await _chat_complete(
             router_address=reward_router_address,

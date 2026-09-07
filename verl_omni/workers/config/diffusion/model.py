@@ -39,6 +39,7 @@ class DiffusionModelConfig(BaseConfig):
     _mutable_fields = {
         "model_type",
         "algorithm",
+        "mtp",
         "tokenizer_path",
         "tokenizer",
         "processor",
@@ -46,6 +47,8 @@ class DiffusionModelConfig(BaseConfig):
         "local_tokenizer_path",
         "architecture",
         "transformer_config",
+        "extra_tokenizer_map",
+        "hf_config",
     }
 
     path: str = MISSING
@@ -56,6 +59,7 @@ class DiffusionModelConfig(BaseConfig):
     local_path: Optional[str] = None
     tokenizer_path: Optional[str] = None
     local_tokenizer_path: Optional[str] = None
+    hf_config: Any = None
 
     # model type, e.g., "diffusion_model"
     model_type: str = "diffusion_model"
@@ -64,6 +68,13 @@ class DiffusionModelConfig(BaseConfig):
     load_tokenizer: bool = True
     tokenizer: Any = None
     processor: Any = None
+
+    # Optional per-text-encoder tokenizers for models with multiple text encoders
+    extra_tokenizers: Optional[dict[str, Any]] = None
+
+    # Loaded tokenizers built from ``extra_tokenizers``:
+    # ``{name: {"tokenizer": PreTrainedTokenizer, "max_length": int | None}}``.
+    extra_tokenizer_map: Any = None
 
     # whether to use shared memory
     use_shm: bool = False
@@ -115,15 +126,15 @@ class DiffusionModelConfig(BaseConfig):
     def __post_init__(self):
         import_external_libs(self.external_lib)
 
-        valid_backends = {"native", "_native_npu", "_flash_3_varlen_hub"}
+        valid_backends = {"native", "_native_npu", "flash_varlen_hub", "_flash_3_varlen_hub"}
         if self.attn_backend not in valid_backends:
             raise ValueError(f"Invalid attn_backend: {self.attn_backend}. Must be one of {sorted(valid_backends)}")
 
-        if self.attn_backend == "_flash_3_varlen_hub":
+        if self.attn_backend in ["flash_varlen_hub", "_flash_3_varlen_hub"]:
             try:
                 import kernels  # noqa: F401
             except ImportError as e:
-                raise ImportError("attn_backend '_flash_3_varlen_hub' requires `kernels` package. ") from e
+                raise ImportError(f"attn_backend '{self.attn_backend}' requires `kernels` package. ") from e
 
         self.local_path = resolve_model_local_dir(self.path, use_shm=self.use_shm)
         if self.tokenizer_path is None:
@@ -162,6 +173,21 @@ class DiffusionModelConfig(BaseConfig):
             else:
                 self.processor = None
 
+            self.extra_tokenizer_map = {}
+            for name, spec in (self.extra_tokenizers or {}).items():
+                path = spec.get("path") if hasattr(spec, "get") else None
+                if not path:
+                    raise ValueError(f"extra_tokenizers[{name!r}] must define a 'path' entry.")
+                if not os.path.isabs(path):
+                    path = os.path.join(self.local_path, path)
+                local_path = copy_to_local(path, use_shm=self.use_shm)
+                tokenizer = hf_tokenizer(local_path, trust_remote_code=self.trust_remote_code, use_fast=True)
+                max_length = spec.get("max_length")
+                self.extra_tokenizer_map[name] = {
+                    "tokenizer": tokenizer,
+                    "max_length": int(max_length) if max_length is not None else None,
+                }
+
         # Ensure target_modules is a str or list[str] (only if not None)
         if self.target_modules is not None:
             if not isinstance(self.target_modules, (str | list)):
@@ -175,6 +201,16 @@ class DiffusionModelConfig(BaseConfig):
                         raise TypeError(
                             f"All elements in target_modules list must be strings, but found {type(x).__name__}"
                         )
+
+        if self.lora_rank > 0:
+            # Validate LoRA targets via the model adapter's hook so this generic config
+            # stays architecture-agnostic (non-fatal lookup; unregistered architectures
+            # fall back to the default no-op).
+            from verl_omni.pipelines.model_base import DiffusionModelBase
+
+            adapter = DiffusionModelBase.peek_class(self.architecture, self.algorithm)
+            if adapter is not None:
+                adapter.validate_lora_config(self)
 
     def get_processor(self):
         return self.processor if self.processor is not None else self.tokenizer

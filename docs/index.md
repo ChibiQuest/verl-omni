@@ -35,13 +35,20 @@ start/metrics.md
 
 ```{toctree}
 :maxdepth: 1
+:caption: Configuration
+
+examples/config.md
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Advanced Features
 
 algo/async_reward.md
 algo/rollout_correction.md
 start/rollout_batching.md
 start/http_scorer.md
-start/sd35_drm_flow_grpo.md
+start/diffusion_v1.md
 ```
 
 ```{toctree}
@@ -54,7 +61,30 @@ algo/diffusion_dpo.md
 algo/diffusionnft.md
 algo/grpo_guard.md
 algo/mixgrpo.md
+algo/diffusion_opd.md
 algo/performance.md
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Examples
+
+examples/flowgrpo_trainer.md
+examples/flowdppo_trainer.md
+examples/dpo_trainer.md
+examples/dancegrpo_trainer.md
+examples/diffusionnft_trainer.md
+examples/grpoguard_trainer.md
+examples/gspo_trainer.md
+examples/mixgrpo_trainer.md
+examples/diffusionopd_trainer.md
+examples/flowgrpo_trainer_sd35_drm.md
+examples/bagel/flowgrpo_trainer_bagel.md
+examples/qwen_image_edit/flowgrpo_trainer_qwen_image_edit.md
+examples/ltx2/flowgrpo_trainer_ltx2.md
+examples/minimax_h3/diffusionnft_trainer_minimax_h3.md
+examples/boogu_image/flowgrpo_trainer_boogu_image.md
+examples/minimax_h3/flowgrpo_trainer_minimax_h3.md
 ```
 
 ```{toctree}
@@ -91,6 +121,8 @@ api/utils.rst
 contributing/editing-agent-instructions.md
 contributing/ci_cd.md
 contributing/testing_guide.md
+contributing/integrating_prompt_embedding_cache.md
+contributing/integrating_an_omni_model.md
 contributing/integrating_a_diffusion_model.md
 contributing/integrating_an_i2i_diffusion_model.md
 contributing/integrating_a_non_diffusers_model.md

@@ -56,9 +56,10 @@ See [`docs/start/install.md`](docs/start/install.md) for optional extras.
 
 Titles must follow `[{modules}] {type}: {description}`.
 
-Valid modules: `vllm_omni`, `diffusion`, `omni`, `rollout`, `trainer`, `reward`, `model`, `algo`, `fsdp`, `ray`, `worker`, `data`, `cfg`, `ckpt`, `doc`, `ci`, `tests`, `docker`, `misc`.
-
-Valid types: `feat`, `fix`, `refactor`, `chore`, `test`.
+The [PR-title CI check](tests/special_sanity/check_pr_title.py) is the source
+of truth for valid modules and types; the
+[pull request template](.github/PULL_REQUEST_TEMPLATE.md) mirrors the current
+accepted values.
 
 Add `[BREAKING]` prefix if the PR breaks any API (CLI arguments, config, function signatures).
 
@@ -72,6 +73,16 @@ Your commit message here
 Co-authored-by: GitHub Copilot
 Signed-off-by: Your Name <your.email@example.com>
 ```
+
+Other examples:
+
+```text
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Co-authored-by: OpenAI Codex <noreply@openai.com>
+Co-authored-by: Claude Code
+```
+
+Use the identity of the tool that actually contributed.
 
 ### Resolving agent reviews
 
