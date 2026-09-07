@@ -125,6 +125,9 @@ jobs:
           print(f"runner-size={plan['runner_size']}")
           print(f"test-ids={' '.join(plan['test_ids'])}")
           PY
+      - name: Preprocess qwenimage_ocr dataset
+        run: |
+          python examples/flowgrpo_trainer/data_process/qwenimage_ocr.py --input_dir ${HOME}/.cache/datasets/ocr
       - name: Run NPU smoke tests
         if: steps.resolve-mode.outputs.mode != 'none'
         shell: bash
