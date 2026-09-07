@@ -3,7 +3,7 @@
 set -xeuo pipefail
 
 NUM_NPUS=${NUM_NPUS:-4}
-MODEL_PATH=${MODEL_PATH:-${HOME}/.cache/huggingface/hub/models--Qwen--Qwen-Image/snapshots}
+MODEL_PATH=${MODEL_PATH:-${HOME}/.cache/huggingface/hub/models--Qwen--Qwen-Image/snapshots/75e0b4be04f60ec59a75f475837eced720f823b6}
 TOKENIZER_PATH=${TOKENIZER_PATH:-${MODEL_PATH}/tokenizer}
 DATA_DIR=${DATA_DIR:-${HOME}/.cache/datasets/ocr}
 dummy_train_path=${TRAIN_FILES:-${DATA_DIR}/train.parquet}
