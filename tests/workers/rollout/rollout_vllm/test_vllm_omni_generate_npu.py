@@ -89,6 +89,7 @@ def init_server():
             "enable_sleep_mode": True,
             "free_cache_engine": True,
             "disable_log_stats": True,
+            "rollout_attn_backend": "TORCH_SDPA",
             "n": 2,
             "pipeline": {
                 "_target_": "verl_omni.workers.config.diffusion.rollout.DiffusionPipelineConfig",
@@ -107,6 +108,7 @@ def init_server():
             "trust_remote_code": True,
             "load_tokenizer": True,
             "algorithm": "flow_grpo",
+            "attn_backend": "_native_npu",
         }
     )
     model_cfg.architecture = "QwenImageTransformer2DModel"
