@@ -30,7 +30,7 @@ from verl.workers.rollout.replica import RolloutMode
 from verl_omni.workers.rollout.replica import DiffusionOutput
 from verl_omni.workers.rollout.vllm_rollout.vllm_omni_async_server import vLLMOmniHttpServer
 
-MODEL_PATH = Path(os.path.expanduser("~/.cache/huggingface/hub/models--Qwen--Qwen-Image/snapshots/75e0b4be04f60ec59a75f475837eced720f823b6"))
+MODEL_PATH = Path(os.path.expanduser("~/.cache/modelscope/hub/models/Qwen/Qwen-Image"))
 
 _MIN_PROMPT_TOKENS = 35
 
