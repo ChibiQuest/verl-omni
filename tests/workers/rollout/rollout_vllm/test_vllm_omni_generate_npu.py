@@ -78,8 +78,8 @@ def init_server():
             "data_parallel_size": 1,
             "pipeline_model_parallel_size": 1,
             "gpu_memory_utilization": 0.3,
-            "max_num_batched_tokens": 8192,
-            "max_num_seqs": 64,
+            "max_num_batched_tokens": 1024,
+            "max_num_seqs": 1,
             "max_model_len": 1058,
             "dtype": "bfloat16",
             "load_format": "auto",
@@ -93,8 +93,8 @@ def init_server():
             "n": 2,
             "pipeline": {
                 "_target_": "verl_omni.workers.config.diffusion.rollout.DiffusionPipelineConfig",
-                "height": 512,
-                "width": 512,
+                "height": 192,
+                "width": 192,
                 "num_inference_steps": 4,
             },
         }
