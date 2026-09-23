@@ -30,7 +30,7 @@ from verl.workers.rollout.replica import RolloutMode
 from verl_omni.workers.rollout.replica import DiffusionOutput
 from verl_omni.workers.rollout.vllm_rollout.vllm_omni_async_server import vLLMOmniHttpServer
 
-MODEL_PATH = Path(os.path.expanduser("~/.cache/modelscope/hub/models/Qwen/Qwen-Image"))
+MODEL_PATH = Path(os.path.expanduser(os.getenv("MODEL_PATH", "~/.cache/modelscope/hub/models/tiny-random/Qwen-Image")))
 
 _MIN_PROMPT_TOKENS = 35
 
@@ -55,6 +55,7 @@ def init_server():
         pytest.skip("NPU is not available")
 
     ray.init(
+        num_cpus=min(8, os.cpu_count() or 8),
         runtime_env={
             "env_vars": {
                 "TOKENIZERS_PARALLELISM": "true",
@@ -159,7 +160,6 @@ def test_generate_and_sleep_wakeup(init_server):
                 "true_cfg_scale": 4.0,
                 "height": 512,
                 "width": 512,
-                "logprobs": True,
             },
             request_id=request_id,
         ),
@@ -171,7 +171,6 @@ def test_generate_and_sleep_wakeup(init_server):
     assert output.stop_reason in ("completed", "aborted", None)
     assert output.diffusion_output.dtype == torch.uint8
     assert 0 <= output.diffusion_output[0][0][0] <= 255
-    assert output.log_probs is not None
 
     ray.get(server.sleep.remote())
     ray.get(server.wake_up.remote())

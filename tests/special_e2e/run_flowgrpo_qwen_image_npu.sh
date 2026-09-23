@@ -3,7 +3,7 @@
 set -xeuo pipefail
 
 NUM_NPUS=${NUM_NPUS:-8}
-MODEL_PATH=${MODEL_PATH:~/.cache/modelscope/hub/models/Qwen/Qwen-Image}
+MODEL_PATH=${MODEL_PATH:-${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image}
 TOKENIZER_PATH=${TOKENIZER_PATH:-${MODEL_PATH}/tokenizer}
 DATA_DIR=${DATA_DIR:-${HOME}/data/dummy_diffusion}
 dummy_train_path=${TRAIN_FILES:-${DATA_DIR}/train.parquet}
