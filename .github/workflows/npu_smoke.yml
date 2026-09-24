@@ -52,6 +52,8 @@ jobs:
         run: |
           cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
           npu-smi info
+          echo "===== Ascend/NPU environment ====="
+          env | LC_ALL=C sort | grep -E "(/usr/local/Ascend/|^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND))" || true
       - name: Resolve NPU CI mode
         id: resolve-mode
         shell: bash
