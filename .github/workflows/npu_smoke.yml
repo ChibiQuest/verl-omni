@@ -78,7 +78,11 @@ jobs:
       - name: Prepare tiny Qwen-Image checkpoint
         run: |
           MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
-          python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
+          if [[ -d "${MODEL_PATH}" ]]; then
+            echo "Reusing existing tiny Qwen-Image checkpoint at ${MODEL_PATH}"
+          else
+            python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
+          fi
       - name: Upgrade vLLM stack
         if: steps.resolve-mode.outputs.mode != 'none'
         shell: bash

@@ -34,7 +34,7 @@ from verl.single_controller.base.decorator import Dispatch, make_nd_compute_data
 from verl.trainer.distillation import distillation_ppo_loss, is_distillation_enabled
 from verl.utils import tensordict_utils as tu
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.device import get_device_name, is_npu_available, set_expandable_segments
+from verl.utils.device import get_device_name, get_torch_device, is_npu_available, set_expandable_segments
 from verl.utils.distributed import initialize_global_process_group_ray, set_numa_affinity
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.import_utils import import_external_libs
@@ -951,7 +951,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         assert "actor" in self.role, "ema_update_adapter only supports actor role"
         self.actor.ema_update_adapter(source=source, target=target, decay=decay)
 
-    def _offload_actor_and_empty_cache(self, timings: Optional[dict] = None):
+    def _offload_actor_and_empty_cache(
+        self, timings: Optional[dict] = None, device_index: Optional[int] = None
+    ):
         """Offload actor params to CPU and free cached GPU memory.
 
         Safe to run from a worker thread (via ``asyncio.to_thread``): FSDP param
@@ -959,6 +961,8 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         tensors live in separate allocations that are unaffected by moving the
         base param storage to CPU.
         """
+        if device_index is not None:
+            get_torch_device().set_device(device_index)
         start = time.perf_counter()
         if self.actor.engine.is_param_offload_enabled:
             self.actor.engine.to("cpu", model=True, optimizer=False, grad=False)
@@ -966,7 +970,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         if timings is not None:
             timings["offload_actor_to_cpu"] = time.perf_counter() - start
 
-    def _gather_lora_weights(self, timings: Optional[dict] = None):
+    def _gather_lora_weights(self, timings: Optional[dict] = None, device_index: Optional[int] = None):
         """Gather LoRA adapter params into a CPU dict, without offloading the actor.
 
         Intended to run in a worker thread (via ``asyncio.to_thread``) so the
@@ -975,8 +979,8 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         CPU (independent allocations), so the subsequent actor offload can run
         concurrently with the rollout-side sync without affecting these tensors.
         """
-        if is_npu_available:
-            torch.npu.set_device(int(os.environ.get("LOCAL_RANK", os.environ.get("RANK", 0))))
+        if device_index is not None:
+            get_torch_device().set_device(device_index)
         gather_start = time.perf_counter()
         per_tensor_param, peft_config = self.actor.engine.get_per_tensor_param(
             layered_summon=self.layered_summon,
@@ -1093,13 +1097,18 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             #       allocations, so moving the base param storage to CPU cannot
             #       corrupt the in-flight sync.
             self.rollout.sleep_level = 1
-            gather_task = asyncio.create_task(asyncio.to_thread(self._gather_lora_weights, timings))
+            device_index = get_torch_device().current_device()
+            gather_task = asyncio.create_task(
+                asyncio.to_thread(self._gather_lora_weights, timings, device_index)
+            )
             if resume_weights_task is not None:
                 await resume_weights_task
             log_gpu_memory_usage("After resume weights", logger=logger)
             lora_weights, peft_config = await gather_task
             # Launch the actor offload in the background so it overlaps the sync.
-            offload_task = asyncio.create_task(asyncio.to_thread(self._offload_actor_and_empty_cache, timings))
+            offload_task = asyncio.create_task(
+                asyncio.to_thread(self._offload_actor_and_empty_cache, timings, device_index)
+            )
 
             # Use ZMQ IPC to transfer LoRA weights, bypassing Ray serialization.
             # Broadcast only the update id. Each vLLM worker combines it with its
