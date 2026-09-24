@@ -75,6 +75,10 @@ jobs:
           echo "mode=${mode}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: steps.resolve-mode.outputs.mode != 'none'
+      - name: Prepare tiny Qwen-Image checkpoint
+        run: |
+          MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
+          python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
       - name: Upgrade vLLM stack
         if: steps.resolve-mode.outputs.mode != 'none'
         shell: bash
