@@ -951,9 +951,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         assert "actor" in self.role, "ema_update_adapter only supports actor role"
         self.actor.ema_update_adapter(source=source, target=target, decay=decay)
 
-    def _offload_actor_and_empty_cache(
-        self, timings: Optional[dict] = None, device_index: Optional[int] = None
-    ):
+    def _offload_actor_and_empty_cache(self, timings: Optional[dict] = None, device_index: Optional[int] = None):
         """Offload actor params to CPU and free cached GPU memory.
 
         Safe to run from a worker thread (via ``asyncio.to_thread``): FSDP param
@@ -1098,9 +1096,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             #       corrupt the in-flight sync.
             self.rollout.sleep_level = 1
             device_index = get_torch_device().current_device()
-            gather_task = asyncio.create_task(
-                asyncio.to_thread(self._gather_lora_weights, timings, device_index)
-            )
+            gather_task = asyncio.create_task(asyncio.to_thread(self._gather_lora_weights, timings, device_index))
             if resume_weights_task is not None:
                 await resume_weights_task
             log_gpu_memory_usage("After resume weights", logger=logger)

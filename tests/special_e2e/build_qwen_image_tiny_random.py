@@ -162,7 +162,6 @@ def _build_tiny_chatml_tokenizer(*, vocab_size: int = 2048) -> Qwen2TokenizerFas
     )
 
 
-
 def get_dummy_components(*, tokenizer: Qwen2TokenizerFast, hidden_size: int = 16, seed: int = 42) -> dict[str, Any]:
     """Instantiate tiny Qwen-Image text-to-image diffusion components (random weights)."""
     torch.manual_seed(seed)
