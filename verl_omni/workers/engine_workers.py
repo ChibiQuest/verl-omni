@@ -1095,16 +1095,23 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             #       allocations, so moving the base param storage to CPU cannot
             #       corrupt the in-flight sync.
             self.rollout.sleep_level = 1
-            device_index = get_torch_device().current_device()
-            gather_task = asyncio.create_task(asyncio.to_thread(self._gather_lora_weights, timings, device_index))
+            torch_device = get_torch_device()
+            device_index = torch_device.current_device() if torch_device.is_available() else None
+            if device_index is None:
+                gather_task = asyncio.create_task(asyncio.to_thread(self._gather_lora_weights, timings))
+            else:
+                gather_task = asyncio.create_task(asyncio.to_thread(self._gather_lora_weights, timings, device_index))
             if resume_weights_task is not None:
                 await resume_weights_task
             log_gpu_memory_usage("After resume weights", logger=logger)
             lora_weights, peft_config = await gather_task
             # Launch the actor offload in the background so it overlaps the sync.
-            offload_task = asyncio.create_task(
-                asyncio.to_thread(self._offload_actor_and_empty_cache, timings, device_index)
-            )
+            if device_index is None:
+                offload_task = asyncio.create_task(asyncio.to_thread(self._offload_actor_and_empty_cache, timings))
+            else:
+                offload_task = asyncio.create_task(
+                    asyncio.to_thread(self._offload_actor_and_empty_cache, timings, device_index)
+                )
 
             # Use ZMQ IPC to transfer LoRA weights, bypassing Ray serialization.
             # Broadcast only the update id. Each vLLM worker combines it with its
