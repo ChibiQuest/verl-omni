@@ -22,6 +22,26 @@ export ASCEND_RT_VISIBLE_DEVICES=${ASCEND_RT_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
 export DEVICE_NAME=npu
 export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
 
+echo "===== Source Ascend environment (Test 1) ====="
+set +u
+source /usr/local/Ascend/cann-9.1.0/set_env.sh
+source /usr/local/Ascend/nnal/atb/set_env.sh
+set -u
+echo "===== Ascend environment after source ====="
+ascend_env="$(
+    {
+        env | LC_ALL=C sort | grep -F "/usr/local/Ascend/" || true
+        env | LC_ALL=C sort | grep -E "^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND)" || true
+    } | LC_ALL=C sort -u
+)"
+if [[ -n "${ascend_env}" ]]; then
+    echo "Detected sourced Ascend/NPU environment entries:"
+    printf "%s\n" "${ascend_env}"
+else
+    echo "No Ascend/NPU environment entries were found."
+fi
+echo "========================================="
+
 if [ ! -f "${dummy_train_path}" ] || [ ! -f "${dummy_test_path}" ]; then
     python3 tests/special_e2e/create_dummy_diffusion_data.py \
         --local_save_dir "${DATA_DIR}" \
