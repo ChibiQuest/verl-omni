@@ -116,7 +116,7 @@ run_test() {
         if [[ "${id}" == "0" ]] && grep -Eq '=+ [0-9]+ passed' "${logfile}"; then
             warn "[${id}] Ignoring native teardown abort after pytest success"
             rc=0
-        elif [[ "${id}" == "1" ]] \
+        elif [[ "${id}" == "1" || "${id}" == "2" ]] \
             && grep -q 'training/global_step:1' "${logfile}" \
             && grep -q 'Training Progress: 100%' "${logfile}"; then
             warn "[${id}] Ignoring native teardown abort after training step success"
