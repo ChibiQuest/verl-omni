@@ -4,6 +4,7 @@ set -xeuo pipefail
 
 NUM_NPUS=${NUM_NPUS:-8}
 MODEL_PATH=${MODEL_PATH:-${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers}
+TOKENIZER_PATH=${TOKENIZER_PATH:-${MODEL_PATH}/tokenizer}
 DATA_DIR=${DATA_DIR:-${HOME}/data/dummy_diffusion}
 TRAIN_FILES=${TRAIN_FILES:-${DATA_DIR}/train.parquet}
 VAL_FILES=${VAL_FILES:-${DATA_DIR}/test.parquet}
@@ -46,6 +47,7 @@ python3 -m verl_omni.trainer.main_diffusion \
     algorithm.adv_estimator=dance_grpo \
     actor_rollout_ref.model.algorithm=dance_grpo \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
+    actor_rollout_ref.model.tokenizer_path="${TOKENIZER_PATH}" \
     actor_rollout_ref.model.attn_backend=native \
     actor_rollout_ref.model.custom_chat_template="${CUSTOM_CHAT_TEMPLATE}" \
     actor_rollout_ref.actor.diffusion_loss.loss_mode=dance_grpo \
