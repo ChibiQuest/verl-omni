@@ -62,6 +62,7 @@ jobs:
       PIP_TRUSTED_HOST: "cache-service.nginx-pypi-cache.svc.cluster.local"
       TRANSFORMERS_VERBOSITY: 'error'
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Check npu and CANN info
         run: |
           cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
@@ -100,8 +101,6 @@ jobs:
             fi
           done
           echo "groups=${groups}" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: steps.resolve-groups.outputs.groups != ''
       - name: Prepare tiny Qwen-Image checkpoint
         if: contains(steps.resolve-groups.outputs.groups, 'e2e')
         run: |
