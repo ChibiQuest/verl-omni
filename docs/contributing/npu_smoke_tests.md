@@ -121,26 +121,29 @@ If a test requires a fixed number of devices, validate the value in the test
 script and fail with a clear message instead of silently using an invalid
 parallel configuration.
 
-### 4. Update the workflow test groups
+### 4. Update the workflow label mapping
 
-To run the new test under an existing label, add its ID to the
-`resolve-groups` step in
-[`npu_smoke.yml`](../../.github/workflows/npu_smoke.yml).
-For example, include Test 2 in the full mode:
+The `Resolve NPU CI tests` step in
+[`npu_smoke.yml`](../../.github/workflows/npu_smoke.yml) maps each supported
+pull-request label to one or more test IDs:
 
-```yaml
-if [[ "${mode}" == "all" ]]; then
-  plan_json='{
-    "test_ids": ["0", "1", "2"],
-    "group_count": 3,
-    "num_npus": 8,
-    "runner_size": 8
-  }'
-fi
+```bash
+declare -A label_tests=(
+  ["ready-for-ci"]="0 1 2"
+  ["ci-npu"]="0 1 2"
+  ["ci-npu-core"]="0"
+  ["ci-npu-e2e"]="1 2"
+)
 ```
 
-To run the test independently, add a mode and pull-request label, then update
-both `Resolve NPU CI mode` and `resolve-groups`.
+To run a new test under an existing label, append its ID to that label's value.
+If more than one supported label is present, the workflow takes the union of
+their test IDs, removes duplicates, and sorts the final set before execution.
+
+To introduce a new label, add its key and test IDs to `label_tests`, include
+the label in the job-level trigger condition, and document it in the table
+below. The `resolve-groups` step reads the resulting `test-ids` output and
+does not require a separate mode branch.
 
 If the new test lives outside the current workflow path filters, add its path.
 The current filters include:
@@ -276,12 +279,15 @@ as `verl_omni/**`, `tests/npu_smoke/**`, `tests/workers/**`, or
 
 Pull-request labels select the requested test scope:
 
-| Label | Mode | Requested tests |
-|---|---|---|
-| `ready-for-ci` | all | Tests 0, 1, and 2 |
-| `ci-npu` | all | Tests 0, 1, and 2 |
-| `ci-npu-core` | ci-npu-core | Test 0 |
-| `ci-npu-e2e` | ci-npu-e2e | Tests 1 and 2 |
+| Label | Requested test IDs |
+|---|---|
+| `ready-for-ci` | `0 1 2` |
+| `ci-npu` | `0 1 2` |
+| `ci-npu-core` | `0` |
+| `ci-npu-e2e` | `1 2` |
+
+When multiple supported labels are present, all mapped test IDs are combined.
+For example, `ci-npu-core` plus `ci-npu-e2e` resolves to `0 1 2`.
 
 While Test 1 is disabled, the runner reports it as `SKIP` even when the
 workflow requests it. Test 2 still runs normally.

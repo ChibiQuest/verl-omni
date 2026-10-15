@@ -66,31 +66,43 @@ jobs:
           npu-smi info
           echo "===== Ascend/NPU environment ====="
           env | LC_ALL=C sort | grep -E "(/usr/local/Ascend/|^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND))" || true
-      - name: Resolve NPU CI mode
-        id: resolve-mode
+      - name: Resolve NPU CI tests
+        id: resolve-tests
         shell: bash
         run: |
-          mode="none"
+          declare -A label_tests=(
+            ["ready-for-ci"]="0 1 2"
+            ["ci-npu"]="0 1 2"
+            ["ci-npu-core"]="0"
+            ["ci-npu-e2e"]="1 2"
+          )
+          declare -A selected_tests=()
+
           pr_labels="${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}"
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            mode="all"
-          elif [[ ",${pr_labels}," == *",ready-for-ci,"* ]]; then
-            mode="all"
-          elif [[ ",${pr_labels}," == *",ci-npu,"* ]]; then
-            mode="all"
-          elif [[ ",${pr_labels}," == *",ci-npu-core,"* ]]; then
-            mode="ci-npu-core"
-          elif [[ ",${pr_labels}," == *",ci-npu-e2e,"* ]]; then
-            mode="ci-npu-e2e"
+            labels=("ci-npu")
           else
-            mode="none"
+            IFS=',' read -ra labels <<< "${pr_labels}"
           fi
 
-          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
+          for label in "${labels[@]}"; do
+            requested_tests="${label_tests[${label}]:-}"
+            for test_id in ${requested_tests}; do
+              selected_tests["${test_id}"]=1
+            done
+          done
+
+          test_ids=""
+          if (( ${#selected_tests[@]} > 0 )); then
+            mapfile -t sorted_test_ids < <(printf '%s\n' "${!selected_tests[@]}" | sort -n)
+            test_ids="${sorted_test_ids[*]}"
+          fi
+
+          echo "test-ids=${test_ids}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: steps.resolve-mode.outputs.mode != 'none'
+        if: steps.resolve-tests.outputs.test-ids != ''
       - name: Prepare tiny Qwen-Image checkpoint
-        if: steps.resolve-mode.outputs.mode != 'none'
+        if: steps.resolve-tests.outputs.test-ids != ''
         run: |
           MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
           if [[ -d "${MODEL_PATH}" ]]; then
@@ -99,7 +111,7 @@ jobs:
             python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
           fi
       - name: Prepare tiny Wan2.2 checkpoint
-        if: steps.resolve-mode.outputs.mode == 'all' || steps.resolve-mode.outputs.mode == 'ci-npu-e2e'
+        if: steps.resolve-tests.outputs.test-ids != ''
         run: |
           MODEL_PATH="${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers"
 
@@ -111,7 +123,7 @@ jobs:
               --verify-load
           fi
       - name: Upgrade vLLM stack
-        if: steps.resolve-mode.outputs.mode != 'none'
+        if: steps.resolve-tests.outputs.test-ids != ''
         shell: bash
         run: |
           set -euxo pipefail
@@ -121,51 +133,19 @@ jobs:
           pip show vllm-ascend || true
           pip show vllm-omni || true
       - id: resolve-groups
-        if: steps.resolve-mode.outputs.mode != 'none'
+        if: steps.resolve-tests.outputs.test-ids != ''
         shell: bash
         run: |
-          mode="${{ steps.resolve-mode.outputs.mode }}"
+          test_ids="${{ steps.resolve-tests.outputs.test-ids }}"
+          read -ra test_id_array <<< "${test_ids}"
 
-          if [[ "${mode}" == "all" ]]; then
-            plan_json='{
-              "test_ids": ["0", "1", "2"],
-              "group_count": 3,
-              "num_npus": 8,
-              "runner_size": 8
-            }'
-          elif [[ "${mode}" == "ci-npu-core" ]]; then
-            plan_json='{
-              "test_ids": ["0"],
-              "group_count": 1,
-              "num_npus": 8,
-              "runner_size": 8
-            }'
-          elif [[ "${mode}" == "ci-npu-e2e" ]]; then
-            plan_json='{
-              "test_ids": ["1", "2"],
-              "group_count": 2,
-              "num_npus": 8,
-              "runner_size": 8
-            }'
-          else
-            echo "Unknown NPU smoke mode: ${mode}"
-            exit 1
-          fi
-
-          echo "Resolved NPU smoke plan: ${plan_json}"
-
-          PLAN_JSON="${plan_json}" python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          import os
-
-          plan = json.loads(os.environ["PLAN_JSON"])
-          print(f"group-count={plan['group_count']}")
-          print(f"num-npus={plan['num_npus']}")
-          print(f"runner-size={plan['runner_size']}")
-          print(f"test-ids={' '.join(plan['test_ids'])}")
-          PY
+          echo "Resolved NPU smoke test IDs: ${test_ids}"
+          echo "group-count=${#test_id_array[@]}" >> "$GITHUB_OUTPUT"
+          echo "num-npus=8" >> "$GITHUB_OUTPUT"
+          echo "runner-size=8" >> "$GITHUB_OUTPUT"
+          echo "test-ids=${test_ids}" >> "$GITHUB_OUTPUT"
       - name: Run NPU smoke tests
-        if: steps.resolve-mode.outputs.mode != 'none'
+        if: steps.resolve-tests.outputs.test-ids != ''
         shell: bash
         run: |
           bash tests/npu_smoke/run_npu_smoke_tests.sh \
