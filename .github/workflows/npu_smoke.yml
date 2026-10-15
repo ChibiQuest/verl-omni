@@ -12,6 +12,7 @@ on:
       - "tests/special_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/npu_smoke.yml"
+      - ".github/actions/npu-smoke-prepare/**"
       - ".github/actions/npu-smoke-upload-logs/**"
       - .github/vllm_omni_pin.txt
   pull_request:
@@ -26,6 +27,7 @@ on:
       - "tests/special_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/npu_smoke.yml"
+      - ".github/actions/npu-smoke-prepare/**"
       - ".github/actions/npu-smoke-upload-logs/**"
       - .github/vllm_omni_pin.txt
 
@@ -63,12 +65,6 @@ jobs:
       TRANSFORMERS_VERBOSITY: 'error'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Check npu and CANN info
-        run: |
-          cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
-          npu-smi info
-          echo "===== Ascend/NPU environment ====="
-          env | LC_ALL=C sort | grep -E "(/usr/local/Ascend/|^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND))" || true
       - name: Resolve NPU CI groups
         id: resolve-groups
         shell: bash
@@ -101,37 +97,11 @@ jobs:
             fi
           done
           echo "groups=${groups}" >> "$GITHUB_OUTPUT"
-      - name: Prepare tiny Qwen-Image checkpoint
-        if: contains(steps.resolve-groups.outputs.groups, 'e2e')
-        run: |
-          MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
-          if [[ -d "${MODEL_PATH}" ]]; then
-            echo "Reusing existing tiny Qwen-Image checkpoint at ${MODEL_PATH}"
-          else
-            python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
-          fi
-      - name: Prepare tiny Wan2.2 checkpoint
-        if: contains(steps.resolve-groups.outputs.groups, 'e2e')
-        run: |
-          MODEL_PATH="${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers"
-
-          if [[ -d "${MODEL_PATH}" ]]; then
-            echo "Reusing existing tiny Wan2.2 checkpoint at ${MODEL_PATH}"
-          else
-            python tests/special_e2e/build_wan22_tiny_random.py \
-              --output-dir "${MODEL_PATH}" \
-              --verify-load
-          fi
-      - name: Upgrade vLLM stack
+      - name: Prepare NPU smoke job
         if: steps.resolve-groups.outputs.groups != ''
-        shell: bash
-        run: |
-          set -euxo pipefail
-          
-          echo "===== Installed versions ====="
-          pip show vllm || true
-          pip show vllm-ascend || true
-          pip show vllm-omni || true
+        uses: ./.github/actions/npu-smoke-prepare
+        with:
+          groups: ${{ steps.resolve-groups.outputs.groups }}
       - name: Run NPU smoke tests
         if: steps.resolve-groups.outputs.groups != ''
         shell: bash

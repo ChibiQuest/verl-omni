@@ -28,11 +28,9 @@ source /usr/local/Ascend/cann-9.1.0/set_env.sh
 source /usr/local/Ascend/nnal/atb/set_env.sh
 set -u
 
-if [[ ! -d "${MODEL_PATH}" ]]; then
-    python3 tests/special_e2e/build_wan22_tiny_random.py \
-        --output-dir "${MODEL_PATH}" \
-        --verify-load
-fi
+python3 tests/special_e2e/build_wan22_tiny_random.py \
+    --output-dir "${MODEL_PATH}" \
+    --verify-load
 
 if [[ ! -f "${TRAIN_FILES}" || ! -f "${VAL_FILES}" ]]; then
     python3 tests/special_e2e/create_dummy_diffusion_data.py \

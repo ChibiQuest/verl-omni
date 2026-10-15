@@ -1,0 +1,45 @@
+name: NPU smoke job prepare
+description: Print NPU diagnostics and prepare NPU smoke test assets
+
+inputs:
+  groups:
+    description: Space-separated NPU smoke groups selected by the workflow
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check NPU and CANN info
+      shell: bash
+      run: |
+        cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
+        npu-smi info
+        echo "===== Ascend/NPU environment ====="
+        env | LC_ALL=C sort | grep -E "(/usr/local/Ascend/|^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND))" || true
+
+    - name: Prepare tiny Qwen-Image checkpoint
+      if: contains(inputs.groups, 'e2e')
+      shell: bash
+      run: |
+        MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
+        if [[ -d "${MODEL_PATH}" ]]; then
+          echo "Reusing existing tiny Qwen-Image checkpoint at ${MODEL_PATH}"
+        else
+          python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
+        fi
+
+    - name: Prepare and validate tiny Wan2.2 checkpoint
+      if: contains(inputs.groups, 'e2e')
+      shell: bash
+      run: |
+        MODEL_PATH="${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers"
+        python tests/special_e2e/build_wan22_tiny_random.py \
+          --output-dir "${MODEL_PATH}" \
+          --verify-load
+
+    - name: Print vLLM stack versions
+      shell: bash
+      run: |
+        pip show vllm || true
+        pip show vllm-ascend || true
+        pip show vllm-omni || true

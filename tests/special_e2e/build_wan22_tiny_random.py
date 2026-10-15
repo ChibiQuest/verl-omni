@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import shutil
+from pathlib import Path
 
 import torch
 from diffusers import AutoencoderKLWan, UniPCMultistepScheduler, WanPipeline, WanTransformer3DModel
@@ -27,6 +28,15 @@ from transformers import T5TokenizerFast, UMT5Config, UMT5EncoderModel
 DEFAULT_OUTPUT_DIR = os.path.expanduser("~/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers")
 _METADATA_FILE = "tiny_checkpoint_metadata.json"
 _FORMAT_VERSION = 1
+_REQUIRED_FILES = (
+    "model_index.json",
+    "scheduler/scheduler_config.json",
+    "text_encoder/config.json",
+    "tokenizer/tokenizer_config.json",
+    "transformer/config.json",
+    "vae/config.json",
+)
+_WEIGHT_COMPONENTS = ("text_encoder", "transformer", "vae")
 
 
 def _build_tokenizer() -> T5TokenizerFast:
@@ -72,6 +82,19 @@ def _checkpoint_is_current(output_dir: str) -> bool:
     except (OSError, json.JSONDecodeError):
         return False
     return metadata == {"format_version": _FORMAT_VERSION}
+
+
+def _checkpoint_has_required_components(output_dir: str) -> bool:
+    checkpoint_dir = Path(output_dir)
+    if not all((checkpoint_dir / relative_path).is_file() for relative_path in _REQUIRED_FILES):
+        return False
+    return all(any((checkpoint_dir / component).glob("*.safetensors")) for component in _WEIGHT_COMPONENTS)
+
+
+def _verify_checkpoint_load(output_dir: str, dtype: torch.dtype) -> None:
+    """Reload every persisted component to detect incomplete or corrupt caches."""
+    pipeline = WanPipeline.from_pretrained(output_dir, dtype=dtype, local_files_only=True)
+    del pipeline
 
 
 def build(output_dir: str, *, seed: int = 42, dtype: torch.dtype = torch.bfloat16) -> str:
@@ -138,9 +161,17 @@ def ensure_tiny_wan_checkpoint(
     dtype: torch.dtype = torch.bfloat16,
 ) -> str:
     output_dir = os.path.expanduser(output_dir)
-    if _checkpoint_is_current(output_dir):
-        return output_dir
-    return build(output_dir, seed=seed, dtype=dtype)
+    if _checkpoint_is_current(output_dir) and _checkpoint_has_required_components(output_dir):
+        try:
+            _verify_checkpoint_load(output_dir, dtype)
+        except Exception as error:
+            print(f"Cached Wan checkpoint failed reload validation and will be rebuilt: {error}")
+        else:
+            return output_dir
+
+    output_dir = build(output_dir, seed=seed, dtype=dtype)
+    _verify_checkpoint_load(output_dir, dtype)
+    return output_dir
 
 
 def main() -> None:
@@ -148,13 +179,15 @@ def main() -> None:
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dtype", choices=["float16", "bfloat16", "float32"], default="bfloat16")
-    parser.add_argument("--verify-load", action="store_true")
+    parser.add_argument(
+        "--verify-load",
+        action="store_true",
+        help="Accepted for compatibility; checkpoints are always reloaded and verified.",
+    )
     args = parser.parse_args()
 
     dtype = getattr(torch, args.dtype)
     output_dir = ensure_tiny_wan_checkpoint(args.output_dir, seed=args.seed, dtype=dtype)
-    if args.verify_load:
-        WanPipeline.from_pretrained(output_dir, dtype=dtype)
     print(output_dir)
 
 
