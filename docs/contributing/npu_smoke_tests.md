@@ -69,13 +69,16 @@ scripts in stable core, then e2e, order.
 If the new test lives outside current path filters, add its path. Current
 filters include verl_omni/**, tests/npu_smoke/**, tests/workers/**,
 tests/special_e2e/**, pyproject.toml, .github/workflows/npu_smoke.yml,
-.github/actions/npu-smoke-upload-logs/**, and .github/vllm_omni_pin.txt.
+and .github/vllm_omni_pin.txt.
 
 ### 5. Handle models and datasets
 
-Prefer weights already cached on the runner. Generate a tiny checkpoint only
-when its target directory is absent, allow the path to be overridden, and do
-not overwrite shared caches.
+Prefer tiny checkpoints that can be generated and validated offline. The
+workflow invokes each checkpoint builder before running the selected groups.
+Builders should reuse a valid cached checkpoint, rebuild missing or stale
+components, and reload saved assets when file-presence checks are not
+sufficient. Keep checkpoint paths overridable and do not overwrite shared
+caches.
 
 ### 6. Validate locally
 
@@ -128,6 +131,10 @@ minute timeout, 16 GiB shared memory, and this image:
 The workflow prints CANN details, npu-smi output, relevant Ascend variables,
 and installed vLLM component versions.
 
+The diagnostics and artifact-upload steps are defined directly in the workflow.
+The NPU runner executes the job in a container, so repository-local composite
+actions may otherwise be resolved against a different host workspace.
+
 ## Runtime Cleanup, Results, and Artifacts
 
 Before each test, the shared library stops Ray, terminates stale
@@ -141,8 +148,8 @@ Per-test logs are stored under:
 Each test writes test_<id>.log and each group writes summary.log. The workflow
 also writes group console logs under logs/npu_smoke/parallel/.
 
-The final workflow step runs even after failure and uploads logs/npu_smoke/**
-as the npu-smoke-logs-<job> artifact.
+The final inline actions/upload-artifact step runs even after failure and
+uploads logs/npu_smoke/** as the npu-smoke-logs-<job> artifact.
 
 Some Ascend runtime versions can abort with exit code 134 during allocator
 teardown after a successful workload. The runner accepts 134 only when the

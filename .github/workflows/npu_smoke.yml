@@ -12,8 +12,6 @@ on:
       - "tests/special_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/npu_smoke.yml"
-      - ".github/actions/npu-smoke-prepare/**"
-      - ".github/actions/npu-smoke-upload-logs/**"
       - .github/vllm_omni_pin.txt
   pull_request:
     branches:
@@ -27,8 +25,6 @@ on:
       - "tests/special_e2e/**"
       - "pyproject.toml"
       - ".github/workflows/npu_smoke.yml"
-      - ".github/actions/npu-smoke-prepare/**"
-      - ".github/actions/npu-smoke-upload-logs/**"
       - .github/vllm_omni_pin.txt
 
 # Declare permissions just read content and PR file metadata.
@@ -97,9 +93,21 @@ jobs:
             fi
           done
           echo "groups=${groups}" >> "$GITHUB_OUTPUT"
-      - name: Prepare NPU smoke job
+      - name: Check NPU and CANN info
         if: steps.resolve-groups.outputs.groups != ''
-        uses: ./.github/actions/npu-smoke-prepare
+        shell: bash
+        run: |
+          cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
+          npu-smi info
+          echo "===== Ascend/NPU environment ====="
+          env | LC_ALL=C sort | grep -E "(/usr/local/Ascend/|^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND))" || true
+      - name: Print vLLM stack versions
+        if: steps.resolve-groups.outputs.groups != ''
+        shell: bash
+        run: |
+          pip show vllm || true
+          pip show vllm-ascend || true
+          pip show vllm-omni || true
       - name: Prepare tiny Qwen-Image checkpoint
         shell: bash
         run: |
@@ -134,4 +142,8 @@ jobs:
           exit "${failed}"
       - name: Upload NPU smoke logs
         if: always() && steps.resolve-groups.outputs.groups != ''
-        uses: ./.github/actions/npu-smoke-upload-logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: npu-smoke-logs-${{ github.job }}
+          path: logs/npu_smoke/**
+          if-no-files-found: ignore
