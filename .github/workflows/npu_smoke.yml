@@ -104,11 +104,8 @@ jobs:
         shell: bash
         run: |
           MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
-          if [[ -d "${MODEL_PATH}" ]]; then
-            echo "Reusing existing tiny Qwen-Image checkpoint at ${MODEL_PATH}"
-          else
-            python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
-          fi
+          python tests/special_e2e/build_qwen_image_tiny_random.py \
+            --output-dir "${MODEL_PATH}"
       - name: Prepare and validate tiny Wan2.2 checkpoint
         shell: bash
         run: |
