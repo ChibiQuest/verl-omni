@@ -100,8 +100,25 @@ jobs:
       - name: Prepare NPU smoke job
         if: steps.resolve-groups.outputs.groups != ''
         uses: ./.github/actions/npu-smoke-prepare
-        with:
-          groups: ${{ steps.resolve-groups.outputs.groups }}
+      - name: Prepare tiny Qwen-Image checkpoint
+        if: contains(steps.resolve-groups.outputs.groups, 'e2e')
+        shell: bash
+        run: |
+          MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
+          if [[ -d "${MODEL_PATH}" ]]; then
+            echo "Reusing existing tiny Qwen-Image checkpoint at ${MODEL_PATH}"
+          else
+            python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
+          fi
+      - name: Prepare and validate tiny Wan2.2 checkpoint
+        if: contains(steps.resolve-groups.outputs.groups, 'e2e')
+        shell: bash
+        run: |
+          MODEL_PATH="${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers"
+          python tests/special_e2e/build_wan22_tiny_random.py \
+            --output-dir "${MODEL_PATH}" \
+            --verify-load
+
       - name: Run NPU smoke tests
         if: steps.resolve-groups.outputs.groups != ''
         shell: bash
