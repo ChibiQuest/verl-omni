@@ -11,7 +11,8 @@ on:
       - "tests/workers/**"
       - "tests/special_e2e/**"
       - "pyproject.toml"
-      - .github/workflows/npu_smoke.yml
+      - ".github/workflows/npu_smoke.yml"
+      - ".github/actions/npu-smoke-upload-logs/**"
       - .github/vllm_omni_pin.txt
   pull_request:
     branches:
@@ -24,7 +25,8 @@ on:
       - "tests/workers/**"
       - "tests/special_e2e/**"
       - "pyproject.toml"
-      - .github/workflows/npu_smoke.yml
+      - ".github/workflows/npu_smoke.yml"
+      - ".github/actions/npu-smoke-upload-logs/**"
       - .github/vllm_omni_pin.txt
 
 # Declare permissions just read content and PR file metadata.
@@ -37,8 +39,8 @@ jobs:
     # Pull requests run only after a CI label is applied:
     #   ready-for-ci                    -> all NPU tests as part of full PR validation
     #   ci-npu                         -> all NPU tests for targeted NPU validation
-    #   ci-npu-core                   -> test 0
-    #   ci-npu-e2e                    -> tests 1 and 2
+    #   ci-npu-core                   -> core group
+    #   ci-npu-e2e                    -> e2e group
     # Pushes to main and release branches run the full suite.
     if: >-
       github.repository_owner == 'verl-project' &&
@@ -66,17 +68,17 @@ jobs:
           npu-smi info
           echo "===== Ascend/NPU environment ====="
           env | LC_ALL=C sort | grep -E "(/usr/local/Ascend/|^(ASCEND|ATB|HCCL|NPU|DEVICE_|RANK_TABLE|RAY_EXPERIMENTAL_NOSET_ASCEND))" || true
-      - name: Resolve NPU CI tests
-        id: resolve-tests
+      - name: Resolve NPU CI groups
+        id: resolve-groups
         shell: bash
         run: |
-          declare -A label_tests=(
-            ["ready-for-ci"]="0 1 2"
-            ["ci-npu"]="0 1 2"
-            ["ci-npu-core"]="0"
-            ["ci-npu-e2e"]="1 2"
+          declare -A label_groups=(
+            ["ready-for-ci"]="core e2e"
+            ["ci-npu"]="core e2e"
+            ["ci-npu-core"]="core"
+            ["ci-npu-e2e"]="e2e"
           )
-          declare -A selected_tests=()
+          declare -A selected_groups=()
 
           pr_labels="${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}"
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
@@ -86,23 +88,22 @@ jobs:
           fi
 
           for label in "${labels[@]}"; do
-            requested_tests="${label_tests[${label}]:-}"
-            for test_id in ${requested_tests}; do
-              selected_tests["${test_id}"]=1
+            for group in ${label_groups[${label}]:-}; do
+              selected_groups["${group}"]=1
             done
           done
 
-          test_ids=""
-          if (( ${#selected_tests[@]} > 0 )); then
-            mapfile -t sorted_test_ids < <(printf '%s\n' "${!selected_tests[@]}" | sort -n)
-            test_ids="${sorted_test_ids[*]}"
-          fi
-
-          echo "test-ids=${test_ids}" >> "$GITHUB_OUTPUT"
+          groups=""
+          for group in core e2e; do
+            if [[ -n "${selected_groups[${group}]:-}" ]]; then
+              groups+="${groups:+ }${group}"
+            fi
+          done
+          echo "groups=${groups}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: steps.resolve-tests.outputs.test-ids != ''
+        if: steps.resolve-groups.outputs.groups != ''
       - name: Prepare tiny Qwen-Image checkpoint
-        if: steps.resolve-tests.outputs.test-ids != ''
+        if: contains(steps.resolve-groups.outputs.groups, 'e2e')
         run: |
           MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
           if [[ -d "${MODEL_PATH}" ]]; then
@@ -111,7 +112,7 @@ jobs:
             python tests/special_e2e/build_qwen_image_tiny_random.py --output-dir "${MODEL_PATH}"
           fi
       - name: Prepare tiny Wan2.2 checkpoint
-        if: steps.resolve-tests.outputs.test-ids != ''
+        if: contains(steps.resolve-groups.outputs.groups, 'e2e')
         run: |
           MODEL_PATH="${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers"
 
@@ -123,7 +124,7 @@ jobs:
               --verify-load
           fi
       - name: Upgrade vLLM stack
-        if: steps.resolve-tests.outputs.test-ids != ''
+        if: steps.resolve-groups.outputs.groups != ''
         shell: bash
         run: |
           set -euxo pipefail
@@ -132,22 +133,24 @@ jobs:
           pip show vllm || true
           pip show vllm-ascend || true
           pip show vllm-omni || true
-      - id: resolve-groups
-        if: steps.resolve-tests.outputs.test-ids != ''
-        shell: bash
-        run: |
-          test_ids="${{ steps.resolve-tests.outputs.test-ids }}"
-          read -ra test_id_array <<< "${test_ids}"
-
-          echo "Resolved NPU smoke test IDs: ${test_ids}"
-          echo "group-count=${#test_id_array[@]}" >> "$GITHUB_OUTPUT"
-          echo "num-npus=8" >> "$GITHUB_OUTPUT"
-          echo "runner-size=8" >> "$GITHUB_OUTPUT"
-          echo "test-ids=${test_ids}" >> "$GITHUB_OUTPUT"
       - name: Run NPU smoke tests
-        if: steps.resolve-tests.outputs.test-ids != ''
+        if: steps.resolve-groups.outputs.groups != ''
         shell: bash
         run: |
-          bash tests/npu_smoke/run_npu_smoke_tests.sh \
-            --num-npus "${{ steps.resolve-groups.outputs.num-npus }}" \
-            ${{ steps.resolve-groups.outputs.test-ids }}
+          mkdir -p logs/npu_smoke/parallel
+          failed=0
+          for group in ${{ steps.resolve-groups.outputs.groups }}; do
+            script="tests/npu_smoke/run_npu_smoke_${group}.sh"
+            echo "Running NPU smoke group '${group}' with ${script}"
+            set +e
+            bash "${script}" --num-npus 8 2>&1 | tee "logs/npu_smoke/parallel/${group}.log"
+            rc="${PIPESTATUS[0]}"
+            set -e
+            if [[ "${rc}" -ne 0 ]]; then
+              failed=1
+            fi
+          done
+          exit "${failed}"
+      - name: Upload NPU smoke logs
+        if: always() && steps.resolve-groups.outputs.groups != ''
+        uses: ./.github/actions/npu-smoke-upload-logs
