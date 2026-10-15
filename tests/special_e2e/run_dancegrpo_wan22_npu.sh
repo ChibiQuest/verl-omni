@@ -57,6 +57,7 @@ python3 -m verl_omni.trainer.main_diffusion \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu="${MICRO_BATCH_SIZE_PER_NPU}" \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.actor.fsdp_config.use_orig_params=True \
     actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.actor.fsdp_config.wrap_policy.min_num_params=10000 \
     actor_rollout_ref.rollout.name=vllm_omni \
