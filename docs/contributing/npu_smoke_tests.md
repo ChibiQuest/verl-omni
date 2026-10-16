@@ -1,6 +1,6 @@
 # NPU Smoke Tests
 
-Last updated: 10/15/2026.
+Last updated: 10/16/2026.
 
 This guide explains how to add CI test cases for Huawei Ascend devices in verl-omni.
 
@@ -133,6 +133,18 @@ minute timeout, 16 GiB shared memory, and this image:
 
 The workflow prints CANN details, npu-smi output, relevant Ascend variables,
 and installed vLLM component versions.
+
+The FlowGRPO and DanceGRPO end-to-end launchers source CANN and ATB before
+starting the workload:
+
+```bash
+source "${ASCEND_HOME_PATH:-/usr/local/Ascend/ascend-toolkit/latest}/set_env.sh"
+source /usr/local/Ascend/nnal/atb/set_env.sh
+```
+
+Set `ASCEND_HOME_PATH` to the toolkit directory for a custom installation.
+If it is unset or empty, the launchers use the `latest` symlink. The selected
+CANN version must remain compatible with the image's PyTorch and torch-npu.
 
 The diagnostics and artifact-upload steps are defined directly in the workflow.
 The NPU runner executes the job in a container, so repository-local composite
