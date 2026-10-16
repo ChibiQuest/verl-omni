@@ -73,8 +73,11 @@ and .github/vllm_omni_pin.txt.
 
 ### 5. Handle models and datasets
 
-Prefer tiny checkpoints that can be generated and validated offline. The
-workflow invokes each checkpoint builder before running the selected groups.
+Prefer tiny checkpoints that can be generated and validated offline. Prepare
+shared checkpoints in the workflow and model-specific checkpoints in their
+test launch scripts. The Wan2.2 launcher prepares and validates its checkpoint
+before training, so selecting only the core group does not prepare Wan2.2
+weights.
 Builders should reuse a valid cached checkpoint, rebuild missing or stale
 components, and reload saved assets when file-presence checks are not
 sufficient. Keep checkpoint paths overridable and do not overwrite shared

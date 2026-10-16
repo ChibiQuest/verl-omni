@@ -114,14 +114,6 @@ jobs:
           MODEL_PATH="${HOME}/.cache/modelscope/hub/models/tiny-random/Qwen-Image"
           python tests/special_e2e/build_qwen_image_tiny_random.py \
             --output-dir "${MODEL_PATH}"
-      - name: Prepare and validate tiny Wan2.2 checkpoint
-        shell: bash
-        run: |
-          MODEL_PATH="${HOME}/.cache/models/tiny-random/Wan2.2-TI2V-5B-Diffusers"
-          python tests/special_e2e/build_wan22_tiny_random.py \
-            --output-dir "${MODEL_PATH}" \
-            --verify-load
-
       - name: Run NPU smoke tests
         if: steps.resolve-groups.outputs.groups != ''
         shell: bash
