@@ -22,6 +22,20 @@ export RAY_DEDUP_LOGS=0
 export DEVICE_NAME=npu
 export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
 
+if [[ "${LD_PRELOAD:-}" != *libjemalloc* ]]; then
+    if [[ -z "${JEMALLOC_PATH:-}" ]] && ! JEMALLOC_PATH=$(ldconfig -p 2>/dev/null \
+        | awk '/libjemalloc\.so/ && !path {path = $NF} END {print path}'); then
+        JEMALLOC_PATH=
+    fi
+    if [[ -z "${JEMALLOC_PATH:-}" || ! -r "${JEMALLOC_PATH}" ]]; then
+        fail "Unable to locate a readable jemalloc library for NPU smoke tests."
+        exit 1
+    fi
+    export LD_PRELOAD="${JEMALLOC_PATH}${LD_PRELOAD:+:${LD_PRELOAD}}"
+fi
+
+log "NPU smoke tests will use jemalloc via LD_PRELOAD=${LD_PRELOAD}"
+
 REQUESTED_NUM_NPUS="${NUM_NPUS:-8}"
 while [[ $# -gt 0 ]]; do
     case "$1" in

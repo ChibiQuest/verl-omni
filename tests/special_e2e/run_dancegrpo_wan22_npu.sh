@@ -27,7 +27,6 @@ REWARD_MAX_NUM_BATCHED_TOKENS=${REWARD_MAX_NUM_BATCHED_TOKENS:-512}
 REWARD_MAX_NUM_SEQS=${REWARD_MAX_NUM_SEQS:-1}
 N_RESP_PER_PROMPT=${N_RESP_PER_PROMPT:-2}
 MICRO_BATCH_SIZE_PER_NPU=${MICRO_BATCH_SIZE_PER_NPU:-1}
-DIAG_ROUNDS=${DIAG_ROUNDS:-3}
 if (( ACTOR_NUM_NPUS < 1 || REWARD_NUM_NPUS < 1 || ACTOR_NUM_NPUS + REWARD_NUM_NPUS > NUM_NPUS )); then
     echo "Invalid NPU split: total=${NUM_NPUS}, actor=${ACTOR_NUM_NPUS}, reward=${REWARD_NUM_NPUS}" >&2
     exit 2
@@ -84,54 +83,6 @@ if [[ "${LD_PRELOAD:-}" != *libjemalloc* ]]; then
     export LD_PRELOAD="${JEMALLOC_PATH}${LD_PRELOAD:+:${LD_PRELOAD}}"
 fi
 echo "NPU reward allocator preload: ${LD_PRELOAD}"
-echo "[DIAG] Reward vLLM capacity: gpu_memory_utilization=${REWARD_GPU_MEMORY_UTILIZATION}, "\
-"max_model_len=${REWARD_MAX_MODEL_LEN}, max_num_batched_tokens=${REWARD_MAX_NUM_BATCHED_TOKENS}, "\
-"max_num_seqs=${REWARD_MAX_NUM_SEQS}"
-
-diag_python() {
-    local label="$1"
-    local expr="$2"
-    local i
-
-    for ((i = 1; i <= DIAG_ROUNDS; i++)); do
-        if ! python3 -c "${expr}"; then
-            echo "[DIAG] FAIL: ${label} (round ${i}/${DIAG_ROUNDS})" >&2
-            return 1
-        fi
-    done
-    echo "[DIAG] PASS: ${label} (${DIAG_ROUNDS}/${DIAG_ROUNDS} rounds)"
-}
-
-DIAG_FAILED=0
-set +e
-diag_python "A0: TorchNPU + Triton Ascend target detection" \
-    "import torch_npu; import triton; print(triton.runtime.driver.active.get_current_target())" \
-    || DIAG_FAILED=1
-diag_python "A: import vllm (loads the selected platform plugin)" \
-    "import vllm; print('import vllm OK')" \
-    || DIAG_FAILED=1
-diag_python "B: ModelConfig for Qwen2.5-VL reward model (runs model inspection subprocess)" \
-    "from vllm.config import ModelConfig; ModelConfig(model='${REWARD_MODEL_PATH}'); print('ModelConfig(inspect) OK')" \
-    || DIAG_FAILED=1
-diag_python "C: import vllm.model_executor.models.qwen2_5_vl (reward model class)" \
-    "import vllm.model_executor.models.qwen2_5_vl; print('import qwen2_5_vl OK')" \
-    || DIAG_FAILED=1
-diag_python "D: control import vllm.model_executor.models.qwen3_vl" \
-    "import vllm.model_executor.models.qwen3_vl; print('import qwen3_vl OK')" \
-    || DIAG_FAILED=1
-set -e
-
-if [[ "${DIAG_FAILED}" -ne 0 ]]; then
-    cat >&2 <<'EOF'
-[DIAG] ====================================================================
-[DIAG] Wan2.2 reward-path preflight FAILED. The native vLLM / vLLM-Ascend /
-[DIAG] torch-npu stack cannot safely initialize or inspect the Qwen2.5-VL
-[DIAG] reward model, so starting the training job would fail as well.
-[DIAG] ====================================================================
-EOF
-    exit 1
-fi
-
 python3 tests/special_e2e/build_wan22_tiny_random.py \
     --output-dir "${MODEL_PATH}" \
     --verify-load
