@@ -37,28 +37,12 @@ export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
 export VERL_DATAPROTO_SERIALIZATION_METHOD=numpy
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
-export VLLM_PLUGINS="${VLLM_PLUGINS:-ascend}"
 
 set +u
 source "${ASCEND_HOME_PATH:-/usr/local/Ascend/ascend-toolkit/latest}/set_env.sh"
 source /usr/local/Ascend/nnal/atb/set_env.sh
 set -u
 
-# The Qwen2.5-VL ModelConfig inspection path is allocator-sensitive on the
-# Ascend CI image. Ensure the vLLM server and every inspection subprocess use
-# the same jemalloc runtime instead of relying on an interactive shell profile.
-if [[ "${LD_PRELOAD:-}" != *libjemalloc* ]]; then
-    if [[ -z "${JEMALLOC_PATH:-}" ]] && ! JEMALLOC_PATH=$(ldconfig -p 2>/dev/null \
-        | awk '/libjemalloc\.so/ && !path {path = $NF} END {print path}'); then
-        JEMALLOC_PATH=
-    fi
-    if [[ -z "${JEMALLOC_PATH}" || ! -r "${JEMALLOC_PATH}" ]]; then
-        echo "Unable to locate a readable jemalloc library for the NPU reward path." >&2
-        exit 1
-    fi
-    export LD_PRELOAD="${JEMALLOC_PATH}${LD_PRELOAD:+:${LD_PRELOAD}}"
-fi
-echo "NPU reward allocator preload: ${LD_PRELOAD}"
 python3 tests/special_e2e/build_wan22_tiny_random.py \
     --output-dir "${MODEL_PATH}" \
     --verify-load
