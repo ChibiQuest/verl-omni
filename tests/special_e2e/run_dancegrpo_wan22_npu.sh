@@ -27,30 +27,6 @@ REWARD_MAX_NUM_BATCHED_TOKENS=${REWARD_MAX_NUM_BATCHED_TOKENS:-512}
 REWARD_MAX_NUM_SEQS=${REWARD_MAX_NUM_SEQS:-1}
 N_RESP_PER_PROMPT=${N_RESP_PER_PROMPT:-2}
 MICRO_BATCH_SIZE_PER_NPU=${MICRO_BATCH_SIZE_PER_NPU:-1}
-if (( ACTOR_NUM_NPUS < 1 || REWARD_NUM_NPUS < 1 || ACTOR_NUM_NPUS + REWARD_NUM_NPUS > NUM_NPUS )); then
-    echo "Invalid NPU split: total=${NUM_NPUS}, actor=${ACTOR_NUM_NPUS}, reward=${REWARD_NUM_NPUS}" >&2
-    exit 2
-fi
-if [[ ! "${REWARD_MAX_MODEL_LEN}" =~ ^[1-9][0-9]*$ \
-    || ! "${REWARD_MAX_NUM_BATCHED_TOKENS}" =~ ^[1-9][0-9]*$ \
-    || ! "${REWARD_MAX_NUM_SEQS}" =~ ^[1-9][0-9]*$ \
-    || ! "${REWARD_RESPONSE_LENGTH}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Reward vLLM capacity values must be positive integers." >&2
-    exit 2
-fi
-if (( REWARD_MAX_MODEL_LEN < MAX_PROMPT_LENGTH + REWARD_RESPONSE_LENGTH )); then
-    echo "Reward max_model_len=${REWARD_MAX_MODEL_LEN} is smaller than prompt+response=$((MAX_PROMPT_LENGTH + REWARD_RESPONSE_LENGTH))." >&2
-    exit 2
-fi
-if (( REWARD_MAX_NUM_BATCHED_TOKENS < REWARD_MAX_MODEL_LEN )); then
-    echo "Reward max_num_batched_tokens=${REWARD_MAX_NUM_BATCHED_TOKENS} must be at least max_model_len=${REWARD_MAX_MODEL_LEN}." >&2
-    exit 2
-fi
-if ! awk -v value="${REWARD_GPU_MEMORY_UTILIZATION}" 'BEGIN { exit !(value > 0 && value <= 1) }'; then
-    echo "Reward gpu_memory_utilization must be in (0, 1], got ${REWARD_GPU_MEMORY_UTILIZATION}." >&2
-    exit 2
-fi
-
 MINI_BATCH_SIZE=$((MICRO_BATCH_SIZE_PER_NPU * ACTOR_NUM_NPUS))
 TRAIN_BATCH_SIZE=$((MINI_BATCH_SIZE * N_RESP_PER_PROMPT))
 CUSTOM_CHAT_TEMPLATE='"{% if messages %}{% for message in messages %}{% if message[\"role\"] == \"user\" %}{{ message[\"content\"] }}{% endif %}{% endfor %}{% endif %}</s>"'
