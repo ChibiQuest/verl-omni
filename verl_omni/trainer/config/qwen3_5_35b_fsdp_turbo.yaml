@@ -1,0 +1,76 @@
+# Qwen3.5-35B-A3B multimodal RL: FSDPTurbo actor + native vLLM rollout.
+
+hydra:
+  searchpath:
+    - pkg://verl.trainer.config
+
+defaults:
+  - ppo_trainer
+  - omni/model@actor_rollout_ref.model: omni_model
+  - agentic/image_gen_tools@agentic_image_gen
+  - _self_
+
+reward:
+  reward_manager:
+    source: register
+    name: naive
+    module: null
+
+actor_rollout_ref:
+  model:
+    model_stage: all
+
+  ref:
+    strategy: fsdp_turbo
+    fsdp_config:
+      strategy: fsdp_turbo
+      turbo_config: ${actor_rollout_ref.actor.fsdp_config.turbo_config}
+
+  rollout:
+    name: vllm
+
+  actor:
+    _target_: verl_omni.workers.config.omni.OmniActorConfig
+    trainer_type: policy_gradient
+    strategy: fsdp_turbo
+    fsdp_config:
+      strategy: fsdp_turbo
+      model_dtype: bfloat16
+      ulysses_sequence_parallel_size: 1
+      turbo_config:
+        distributed:
+          fully_shard_parallel_size: 16
+          tensor_parallel_size: 1
+          ulysses_parallel_size: 1
+          expert_parallel_size: 16
+          expert_fully_shard_parallel_size: 1
+          fsdp_plan:
+            apply_modules:
+              model.visual.blocks.{*}: {}
+              model.visual.patch_embed: {}
+              model.visual.pos_embed: {}
+              model.language_model.layers.{*}: {}
+              model.language_model.embed_tokens: {}
+              lm_head: {}
+            param_dtype: bf16
+            reduce_dtype: fp32
+            output_dtype: bf16
+            cast_forward_inputs: true
+            num_to_forward_prefetch: 1
+            num_to_backward_prefetch: 1
+            hook_modules:
+              - model.language_model.layers.{*}
+            fsdp_implementation: native
+          ep_plan:
+            apply_modules:
+              - model.language_model.layers.{*}.mlp.experts
+            dispatcher: fused
+            apply_efsdp_modules:
+              - model.language_model.layers.{*}.mlp.experts
+        memory:
+          recompute: true
+          recompute_plan:
+            - model.language_model.layers.{*}
+            - model.visual.blocks.{*}
+        quantization:
+          quantization_plan: null

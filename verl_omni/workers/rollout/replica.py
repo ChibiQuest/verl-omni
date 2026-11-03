@@ -99,4 +99,12 @@ def _load_vllm_omni():
     return vLLMOmniReplica
 
 
+def _load_vllm():
+    """Load verl-omni's model-config-aware native vLLM replica."""
+    from verl_omni.workers.rollout.vllm_rollout.vllm_async_server import OmniAwareVLLMReplica
+
+    return OmniAwareVLLMReplica
+
+
+RolloutReplicaRegistry.register("vllm", _load_vllm)
 RolloutReplicaRegistry.register("vllm_omni", _load_vllm_omni)

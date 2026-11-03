@@ -18,6 +18,7 @@ from .fsdp import (  # noqa: F401
     PPODiffusersFSDPEngine,
 )
 from .fsdp.omni_impl import OmniFSDPEngine  # noqa: F401
+from .fsdp_turbo import OmniFSDPTurboEngine  # noqa: F401
 
 try:
     from .megatron import OmniMegatronEngine  # noqa: F401
@@ -41,6 +42,7 @@ __all__ = [
     "OmniVeOmniEngine",
     "VeOmniDiffusionEngine",
     "OmniFSDPEngine",
+    "OmniFSDPTurboEngine",
 ]
 
 if OmniMegatronEngine is not None:

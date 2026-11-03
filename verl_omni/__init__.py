@@ -21,10 +21,11 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "version/vers
 
 
 # Apply model patches and auto-register agent loops / pipelines / rollout / reward loop / engines
-import verl_omni.agent_loop  # noqa: E402, F401
+if os.getenv("VERL_OMNI_QWEN35_ONLY") != "1":
+    import verl_omni.agent_loop  # noqa: E402, F401
+    import verl_omni.reward_loop  # noqa: E402, F401
 import verl_omni.models  # noqa: E402, F401
 import verl_omni.pipelines  # noqa: E402, F401
-import verl_omni.reward_loop  # noqa: E402, F401
 import verl_omni.trainer  # noqa: E402, F401
 import verl_omni.workers.checkpoint_engine  # noqa: E402, F401 -- omni_delta_sharded backend registration
 import verl_omni.workers.engine  # noqa: E402, F401
