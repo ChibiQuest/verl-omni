@@ -21,8 +21,14 @@ from functools import lru_cache
 from typing import Optional
 
 import torch
-from diffusers import ModelMixin, SchedulerMixin
-from diffusers.training_utils import compute_density_for_timestep_sampling
+try:
+    from diffusers import ModelMixin, SchedulerMixin
+    from diffusers.training_utils import compute_density_for_timestep_sampling
+except ModuleNotFoundError:
+    from .model_base import ModelMixin, SchedulerMixin
+
+    def compute_density_for_timestep_sampling(*args, **kwargs):
+        raise ModuleNotFoundError("diffusers is required for diffusion pipelines")
 from tensordict import TensorDict
 from verl.utils.device import get_device_name
 

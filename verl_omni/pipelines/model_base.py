@@ -18,7 +18,14 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional
 
 import torch
-from diffusers import ModelMixin, SchedulerMixin
+try:
+    from diffusers import ModelMixin, SchedulerMixin
+except ModuleNotFoundError:
+    class ModelMixin:  # type-only fallback for autoregressive pipelines
+        pass
+
+    class SchedulerMixin:  # type-only fallback for autoregressive pipelines
+        pass
 from tensordict import TensorDict
 from verl.utils import tensordict_utils as tu
 
